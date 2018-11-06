@@ -1163,8 +1163,31 @@ void testSchemaParser() {
                                           ->getElementType()));
 
   // test tensor with annotated alias sets
-  parseSchema("at::what(Tensor(t) foo) -> (Tensor(t))");
+  parseSchema("at::what(Tensor(a -> b) foo) -> (Tensor(a))");
 
+  {
+    const auto s = parseSchema(
+        "at::append(Tensor(b -> b|c)[](a!) list, Tensor(c) element)"
+        " -> (Tensor(b|c)[](a!))");
+
+    // The list itself is annotated with `a`
+    const auto& aliasInfo = *s.arguments().at(0).alias_info();
+    ASSERT_TRUE(
+        aliasInfo.inputSets() ==
+        std::set<Symbol>{Symbol::fromQualString("alias::a")});
+    ASSERT_TRUE(aliasInfo.isWrite());
+
+    // Check the contained types
+    ASSERT_TRUE(!aliasInfo.containedTypes().empty());
+    const auto& containedAliasInfo = aliasInfo.containedTypes()[0];
+    ASSERT_TRUE(
+        containedAliasInfo.inputSets() ==
+        std::set<Symbol>{Symbol::fromQualString("alias::b")});
+    const auto expected = std::set<Symbol>{Symbol::fromQualString("alias::b"),
+                                           Symbol::fromQualString("alias::c")};
+    ASSERT_TRUE(containedAliasInfo.outputSets() == expected);
+    ASSERT_FALSE(containedAliasInfo.isWrite());
+  }
 }
 
 void testTopologicalIndex() {
